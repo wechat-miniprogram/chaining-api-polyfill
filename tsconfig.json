@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "module": "CommonJS",
+        "target": "es5",
+        "esModuleInterop": true,
+        "moduleResolution": "node",
+        "lib": ["ES6", "ES7", "DOM", "ESNext"],
+        "types": ["jest", "node"]
+    },
+    "include": [
+        "src/**/*.ts"
+    ]
+}
