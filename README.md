@@ -40,16 +40,19 @@ npm install 之后，需要点一下小程序开发者工具菜单中的“工�
 
 ```ts
 import { Component } from 'miniprogram-chaining-api-polyfill'
+
+// 然后就可以使用 Chaining API 了
+Component()
+  // ...
+  .register()
 ```
 
-然后就可以使用 Chaining API 了。
+注意：如果这个组件本身只用在 glass-easel 组件框架下，最好不要在这个组件文件中引入 polyfill 。
 
-上述方式引入时，会自动判断当前环境是否具有原生的 Chaining API 支持。如果有，就会使用原生的；反之会激活 polyfill 。
-
-如果需要强制激活 polyfill ，可以这样引入：
+类似地，也有：
 
 ```ts
-import { ComponentForcePolyfill as Component } from 'miniprogram-chaining-api-polyfill'
+import { Behavior } from 'miniprogram-chaining-api-polyfill'
 ```
 
 

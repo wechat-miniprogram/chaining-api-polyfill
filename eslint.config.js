@@ -4,13 +4,20 @@ const importPlugin = require('eslint-plugin-import')
 const prettierRecommended = require('eslint-plugin-prettier/recommended')
 const promise = require('eslint-plugin-promise')
 
-module.exports = tseslint.config({
+const tsconfig = tseslint.config({
   files: ["src/**/*.[jt]s", "dist/**/*.[jt]s"],
   extends: [
     js.configs.recommended,
-    importPlugin.flatConfigs.recommended,
     promise.configs['flat/recommended'],
     prettierRecommended,
     tseslint.configs.recommended,
   ],
+  rules: {
+    "@typescript-eslint/no-explicit-any": "off",
+  },
 })
+
+module.exports = [
+  // importPlugin.flatConfigs.recommended,
+  ...tsconfig,
+]
