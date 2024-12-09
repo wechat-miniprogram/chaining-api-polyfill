@@ -14,18 +14,6 @@
 然而，在未激活 glass-easel 组件框架时，或在旧版本的小程序基础库中， Chaining API 不被支持。这个 polyfill 可以在这些时候补上 Chaining API 支持。
 
 
-## 这个 Polyfill 对 Chaining API 的支持度
-
-这个 Polyfill 支持提供绝大多数 Chaining API 系列接口。
-
-但受限于旧版小程序框架，仍有少量接口无法支持，主要包括：
-
-* `.data(...)` 中不能使用函数形式，只能使用对象形式。
-* `.init(ctx)` 中不支持 `ctx.relation` 。
-
-最好在 TypeScript 下使用这个模块。（这样可以准确知道可用的接口。）
-
-
 ## 基础用法
 
 首先在 npm 中引入：
@@ -54,6 +42,83 @@ Component()
 ```ts
 import { Behavior } from 'miniprogram-chaining-api-polyfill'
 ```
+
+
+## 这个 Polyfill 对 Chaining API 的支持度
+
+这个 Polyfill 支持提供绝大多数 Chaining API 系列接口。但受限于旧版小程序框架，仍有少量接口无法支持。
+
+以下是不支持的接口列表及相应的修改建议。
+
+### 不支持 `.data(...)`
+
+使用 `.staticData(...)` 代替，例如：
+
+```ts
+Comopnent()
+  .data(() => ({ hello: 'world' })) // 不支持
+  .register()
+```
+
+改为：
+
+```ts
+Component()
+  .staticData({ hello: 'world' })
+  .register()
+```
+
+### `.init(...)` 中的 `observer` 需要在外部有相应定义
+
+`.init(...)` 中不直接支持 `observer` 。如需使用，需要在链式调用上预留一个空函数。例如：
+
+```ts
+Comopnent()
+  .init(({ observer }) => {
+    observer('hello', () => { // 不支持
+      // do something
+    })
+  })
+  .register()
+```
+
+改为：
+
+```ts
+Comopnent()
+  .observer('hello', () => {}) // 预留一个空函数作为定义
+  .init(({ observer }) => {
+    observer('hello', () => {
+      // do something
+    })
+  })
+  .register()
+```
+
+### `.init(...)` 中不支持 `relation`
+
+`.init(...)` 中不能使用 `relation` 。如需使用，需要写在链式调用上。例如：
+
+```ts
+Component()
+  .init(({ relation }) => {
+    relation('another', { type: 'parent' }) // 不支持
+  })
+  .register()
+```
+
+改为：
+
+```ts
+Component()
+  .relation('another', { type: 'parent' })
+  .register()
+```
+
+### 其他不支持的细节
+
+* 链式调用上的 `lifetime` `pageLifetime` `observer` 不支持设置 `once` 参数。
+* 不支持 `.chainingFilter(...)` 。
 
 
 ## LICENSE
