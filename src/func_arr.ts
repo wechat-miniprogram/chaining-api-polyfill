@@ -10,6 +10,13 @@ export class FuncArr<F extends GeneralFuncType> {
     this.empty = false
   }
 
+  clone(): FuncArr<F> {
+    const ret = new FuncArr<F>()
+    ret.empty = this.empty
+    ret._$arr = this._$arr
+    return ret
+  }
+
   call(caller: ThisParameterType<F>, args: Parameters<F>): boolean {
     const arr = this._$arr
     let ret = true

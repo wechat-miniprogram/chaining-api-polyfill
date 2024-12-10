@@ -23,7 +23,7 @@ export type PropertyType = WechatMiniprogram.Component.AllProperty
 export type PropertyToData<T extends PropertyType> = WechatMiniprogram.Component.PropertyToData<T>
 type IAnyObject = WechatMiniprogram.IAnyObject
 
-type NewFieldList<TObject, TNewObject> =
+export type NewFieldList<TObject, TNewObject> =
   Extract<keyof TObject, keyof TNewObject> extends never ? TNewObject : never
 
 type Lifetimes = {
@@ -47,7 +47,12 @@ export type Component<
   TProperty extends PropertyList,
   TMethod extends MethodList,
   TExtraThisFields extends DataList = Empty,
-> = WechatMiniprogram.Component.Instance<TData, TProperty, TMethod, []> & TExtraThisFields
+> = WechatMiniprogram.Component.Instance<TData, TProperty, TMethod, [], Empty> &
+  TExtraThisFields & {
+    traitBehavior: <TOut extends { [x: string]: any }>(
+      traitBehavior: TraitBehavior<any, TOut>,
+    ) => TOut | undefined
+  }
 
 export type ComponentMethod = (...any: []) => void
 
@@ -103,11 +108,18 @@ class ChainingPolyfillMetadata {
         }
         this.traitGroup.implement(trait_behavior, impl)
       },
-      observer: () => {
+      observer: (paths: any, func: (newValue: any) => void) => {
         if (this.initDone) {
           throw new Error('Cannot execute init-time functions after initialization')
         }
-        // TODO
+        const fields = typeof paths === 'string' ? paths : paths.join(', ')
+        const funcs = this.observers[fields]
+        if (!funcs) {
+          throw new Error(
+            'The `observer` call should has a corresponding `.observer` call in chaining',
+          )
+        }
+        funcs.add(func)
       },
       lifetime: (name: string, func: () => void) => {
         if (this.initDone) {
@@ -142,12 +154,14 @@ class ChainingPolyfillMetadata {
   }
 
   callLifetime(caller: unknown, name: string, ...args: any[]) {
-    const funcs = getChainingPolyfillMetadata(self).lifetimes[name] ?? []
+    const funcs = this.lifetimes[name]
+    if (!funcs) return
     funcs.call(caller, args)
   }
 
   callPageLifetime(caller: unknown, name: string, ...args: any[]) {
-    const funcs = getChainingPolyfillMetadata(self).pageLifetimes[name] ?? []
+    const funcs = this.pageLifetimes[name]
+    if (!funcs) return
     funcs.call(caller, args)
   }
 }
@@ -156,46 +170,55 @@ const getChainingPolyfillMetadata = (comp: GeneralComponent): ChainingPolyfillMe
   return comp._$chainingPolyfill
 }
 
+const takeChainingPolyfillInitData = (
+  comp: GeneralComponent,
+): ChainingPolyfillInitData | undefined => {
+  const id = comp.data._$chainingPolyfillId
+  if (!(id >= 0)) return undefined
+  comp.data._$chainingPolyfillId = -1
+  const initData = initDataMap[id]
+  const cloneMap = (src: { [k: string]: FuncArr<any> }) => {
+    const dest = {} as typeof src
+    const keys = Object.keys(src)
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i]!
+      dest[key] = src[key].clone()
+    }
+    return dest
+  }
+  return {
+    lifetimes: cloneMap(initData.lifetimes),
+    pageLifetimes: cloneMap(initData.lifetimes),
+    observers: cloneMap(initData.observers),
+    initFuncs: initData.initFuncs.clone(),
+  }
+}
+
 const chainingPolyfillBehavior = Behavior({
   lifetimes: {
     created() {
       const self = this as any
-      if (self.data._$chainingPolyfillMetadata) {
-        const initData = self.data._$chainingPolyfillMetadata as ChainingPolyfillInitData
-        self.data._$chainingPolyfillMetadata = null
+      const initData = takeChainingPolyfillInitData(self)
+      if (initData) {
         const chainingPolyfillMetadata = new ChainingPolyfillMetadata(initData)
         self._$chainingPolyfill = chainingPolyfillMetadata
         const ctx = chainingPolyfillMetadata.generateBuilderContext(self)
         initData.initFuncs.call(self, [ctx, chainingPolyfillMetadata])
         chainingPolyfillMetadata.setInitDone()
       }
-      getChainingPolyfillMetadata(this).callLifetime(this, 'created')
-    },
-    attached() {
-      getChainingPolyfillMetadata(this).callLifetime(this, 'attached')
-    },
-    moved() {
-      getChainingPolyfillMetadata(this).callLifetime(this, 'moved')
-    },
-    detached() {
-      getChainingPolyfillMetadata(this).callLifetime(this, 'detached')
-    },
-    ready() {
-      getChainingPolyfillMetadata(this).callLifetime(this, 'ready')
     },
   },
-  pageLifetimes: {
-    show() {
-      getChainingPolyfillMetadata(this).callPageLifetime(this, 'show')
-    },
-    hide() {
-      getChainingPolyfillMetadata(this).callPageLifetime(this, 'hide')
-    },
-    resize(size) {
-      getChainingPolyfillMetadata(this).callPageLifetime(this, 'resize', size)
+  methods: {
+    traitBehavior<TOut extends { [x: string]: any }>(
+      traitBehavior: TraitBehavior<any, TOut>,
+    ): TOut | undefined {
+      return getChainingPolyfillMetadata(this).traitGroup.get(traitBehavior)
     },
   },
 })
+
+let behaviorIdInc = 1
+const initDataMap: { [id: number]: ChainingPolyfillInitData } = {}
 
 export class BaseBehaviorBuilder<
   TPrevData extends DataList = Empty,
@@ -207,26 +230,58 @@ export class BaseBehaviorBuilder<
   TComponentExport = never,
   TExtraThisFields extends DataList = Empty,
 > {
+  behaviorId: number
+  private _$initData = {
+    lifetimes: {},
+    pageLifetimes: {},
+    observers: {},
+    initFuncs: new FuncArr(),
+  } as ChainingPolyfillInitData
   protected _$definition = {
-    data: {
-      _$chainingPolyfillMetadata: {
-        lifetimes: {},
-        observers: {},
-      } as ChainingPolyfillInitData,
-    } as DataList,
+    data: {} as DataList,
     properties: {} as WechatMiniprogram.Behavior.PropertyOption,
     methods: {} as MethodList,
     behaviors: [chainingPolyfillBehavior],
-    lifetimes: {} as { [key: string]: GeneralFuncType },
-    pageLifetimes: {} as { [key: string]: GeneralFuncType },
+    lifetimes: {
+      created() {
+        getChainingPolyfillMetadata(this).callLifetime(this, 'created')
+      },
+      attached() {
+        getChainingPolyfillMetadata(this).callLifetime(this, 'attached')
+      },
+      moved() {
+        getChainingPolyfillMetadata(this).callLifetime(this, 'moved')
+      },
+      detached() {
+        getChainingPolyfillMetadata(this).callLifetime(this, 'detached')
+      },
+      ready() {
+        getChainingPolyfillMetadata(this).callLifetime(this, 'ready')
+      },
+    },
+    pageLifetimes: {
+      show() {
+        getChainingPolyfillMetadata(this).callPageLifetime(this, 'show')
+      },
+      hide() {
+        getChainingPolyfillMetadata(this).callPageLifetime(this, 'hide')
+      },
+      resize(size: unknown) {
+        getChainingPolyfillMetadata(this).callPageLifetime(this, 'resize', size)
+      },
+    },
     observers: [] as { fields: string; observer: GeneralFuncType }[],
     relations: {} as { [key: string]: WechatMiniprogram.Component.RelationOption },
     externalClasses: [] as string[],
     export: undefined as undefined | (() => TComponentExport),
+    options: undefined as undefined | WechatMiniprogram.Component.ComponentOptions,
   }
 
-  protected _$getChainingPolyfillInitData(): ChainingPolyfillInitData {
-    return this._$definition.data.chainingPolyfillMetadata
+  constructor() {
+    this.behaviorId = behaviorIdInc
+    behaviorIdInc += 1
+    this._$definition.data._$chainingPolyfillId = this.behaviorId
+    initDataMap[this.behaviorId] = this._$initData
   }
 
   /** Add external classes */
@@ -344,7 +399,17 @@ export class BaseBehaviorBuilder<
     func: (this: Component<TData, TProperty, TMethod, TExtraThisFields>, ...args: any[]) => any,
   ): ResolveBehaviorBuilder<this> {
     const fields = typeof paths === 'string' ? paths : paths.join(', ')
-    this._$definition.observers.push({ fields, observer: func })
+    const assistObservers = new FuncArr()
+    assistObservers.add(func)
+    const observer = function (
+      this: Component<TData, TProperty, TMethod, TExtraThisFields>,
+      ...args: any[]
+    ) {
+      assistObservers.call(this, args)
+    }
+    this._$definition.observers.push({ fields, observer })
+    const observers = this._$initData.observers
+    observers[fields] = assistObservers
     return this as any
   }
 
@@ -358,7 +423,7 @@ export class BaseBehaviorBuilder<
       ...args: Parameters<Lifetimes[L]>
     ) => ReturnType<Lifetimes[L]>,
   ): ResolveBehaviorBuilder<this> {
-    const lifetimes = this._$getChainingPolyfillInitData().lifetimes
+    const lifetimes = this._$initData.lifetimes
     if (!lifetimes[name]) {
       lifetimes[name] = new FuncArr()
     }
@@ -376,7 +441,7 @@ export class BaseBehaviorBuilder<
       ...args: Parameters<PageLifetimes[L]>
     ) => any,
   ): ResolveBehaviorBuilder<this> {
-    const pageLifetimes = this._$getChainingPolyfillInitData().pageLifetimes
+    const pageLifetimes = this._$initData.pageLifetimes
     if (!pageLifetimes[name]) {
       pageLifetimes[name] = new FuncArr()
     }
@@ -422,7 +487,7 @@ export class BaseBehaviorBuilder<
       TExtraThisFields
     >
   > {
-    this._$getChainingPolyfillInitData().initFuncs.add((ctx, meta: ChainingPolyfillMetadata) => {
+    this._$initData.initFuncs.add((ctx, meta: ChainingPolyfillMetadata) => {
       const comp = ctx.self
       const exported = func.call(comp, ctx)
       meta.handleBuilderContextExport(comp, exported)
@@ -436,7 +501,7 @@ export class BaseBehaviorBuilder<
     TNewMethod extends MethodList = Empty,
     TNewComponentExport = never,
   >(
-    definition: WechatMiniprogram.Component.Options<TNewData, TNewProperty, TNewMethod, any> &
+    definition: ClassicDefinition<TNewData, TNewProperty, TNewMethod> &
       ThisType<
         Component<
           TData & TNewData,
@@ -475,7 +540,7 @@ export class BaseBehaviorBuilder<
       export: exports,
     } = definition
     if (behaviors) {
-      this._$definition.behaviors.push(...behaviors)
+      this._$definition.behaviors.push(...(behaviors as any[]))
     }
     if (rawProperties) {
       Object.assign(this._$definition.properties, rawProperties)
@@ -567,3 +632,14 @@ export interface BuilderContext<
 type EventListener<TDetail extends IAnyObject> = (ev: Event<TDetail>) => boolean | void
 
 type Event<TDetail extends IAnyObject> = WechatMiniprogram.CustomEvent<TDetail, any, any, any>
+
+export type ClassicDefinition<
+  TData extends WechatMiniprogram.Component.DataOption,
+  TProperty extends WechatMiniprogram.Component.PropertyOption,
+  TMethod extends WechatMiniprogram.Component.MethodOption,
+> = Optional<WechatMiniprogram.Component.Data<TData>> &
+  Optional<WechatMiniprogram.Component.Property<TProperty>> &
+  Optional<WechatMiniprogram.Component.Method<TMethod>> &
+  Optional<WechatMiniprogram.Component.Behavior<WechatMiniprogram.Component.BehaviorOption>> &
+  Optional<WechatMiniprogram.Component.Lifetimes> &
+  Partial<WechatMiniprogram.Component.OtherOption>

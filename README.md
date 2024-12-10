@@ -115,6 +115,25 @@ Component()
   .register()
 ```
 
+### 关于 Trait Behaviors
+
+这个 Polyfill 提供了对 trait behaviors 的支持。
+
+但是，不能使用 `this.hasBehavior(...)` 来判定 trait behaviors ，应使用 `this.traitBehavior(...)` 。例如：
+
+```ts
+const helloTrait = Behavior.trait<{ hello: () => string }>()
+
+Component()
+  .init(({ self, implement, lifetime }) => {
+    implement(helloTrait, { hello: () => 'world' } })
+    lifetime('attached', () => {
+      const hello = self.traitBehavior(helloTrait).hello()
+      console.info(hello)
+    })
+  })
+```
+
 ### 其他不支持的细节
 
 * 链式调用上的 `lifetime` `pageLifetime` `observer` 不支持设置 `once` 参数。

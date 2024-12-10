@@ -1,13 +1,21 @@
 import { TraitBehavior } from './trait_behavior'
 import {
+  AllData,
   BaseBehaviorBuilder,
+  BuilderContext,
   ChainingFilterType,
+  ClassicDefinition,
+  Component,
   DataList,
   Empty,
   MethodList,
+  NewFieldList,
   PropertyList,
+  PropertyToData,
+  PropertyType,
   ResolveBehaviorBuilder,
 } from './base'
+import { TaggedMethod, UnTaggedMethod } from './type_utils'
 
 declare const Behavior: WechatMiniprogram.Behavior.Constructor
 
@@ -65,8 +73,6 @@ export class BehaviorBuilder<
   TComponentExport,
   TExtraThisFields
 > {
-  private _$definitionFilter: WechatMiniprogram.Behavior.DefinitionFilter | undefined
-
   /** Use another behavior */
   behavior<
     UData extends DataList,
@@ -87,13 +93,13 @@ export class BehaviorBuilder<
     TComponentExport,
     TExtraThisFields & UExtraThisFields
   > {
-    this._$definition.behaviors.push(behavior)
+    this._$definition.behaviors.push(behavior as any)
     return this as any
   }
 
   /** Set the export value when the component is being selected */
   override export<TNewComponentExport>(
-    f: (this: GeneralComponent, source: GeneralComponent | null) => TNewComponentExport,
+    f: () => TNewComponentExport,
   ): ResolveBehaviorBuilder<
     BehaviorBuilder<
       TPrevData,
@@ -104,8 +110,7 @@ export class BehaviorBuilder<
       TPendingChainingFilter,
       TNewComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     return super.export(f) as any
   }
@@ -113,11 +118,10 @@ export class BehaviorBuilder<
   /**
    * Add some template data fields
    *
-   * It does not support raw data, but a `gen` function which returns the new data fields.
-   * The `gen` function executes once during component creation.
+   * The data should be JSON-compatible, and will be cloned during component creation.
    */
-  override data<T extends DataList>(
-    gen: () => typeUtils.NewFieldList<AllData<TData, TProperty>, T>,
+  staticData<T extends DataList>(
+    data: NewFieldList<AllData<TData, TProperty>, T>,
   ): ResolveBehaviorBuilder<
     BehaviorBuilder<
       T,
@@ -128,10 +132,9 @@ export class BehaviorBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
-    return super.data(gen) as any
+    return super.staticData(data) as any
   }
 
   /**
@@ -139,21 +142,20 @@ export class BehaviorBuilder<
    *
    * The property name should be different from other properties.
    */
-  override property<N extends string, T extends PropertyType, V extends PropertyTypeToValueType<T>>(
+  override property<N extends string, T extends PropertyType>(
     name: N,
-    def: N extends keyof (TData & TProperty) ? never : typeUtils.PropertyListItem<T, V>,
+    def: N extends keyof (TData & TProperty) ? never : T,
   ): ResolveBehaviorBuilder<
     BehaviorBuilder<
       TPrevData,
       TData,
-      TProperty & Record<N, unknown extends V ? T : typeUtils.PropertyOption<T, V>>,
+      TProperty & Record<N, PropertyToData<T>>,
       TMethod,
       TChainingFilter,
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     return super.property(name, def) as any
   }
@@ -164,7 +166,7 @@ export class BehaviorBuilder<
    * The public method can be used as an event handler, and can be visited in component instance.
    */
   override methods<T extends MethodList>(
-    funcs: T & ThisType<Component<TData, TProperty, TMethod & T, any, TExtraThisFields>>,
+    funcs: T & ThisType<Component<TData, TProperty, TMethod, TExtraThisFields>>,
   ): ResolveBehaviorBuilder<
     BehaviorBuilder<
       TPrevData,
@@ -175,8 +177,7 @@ export class BehaviorBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     return super.methods(funcs) as any
   }
@@ -185,19 +186,17 @@ export class BehaviorBuilder<
    * Execute a function while component instance creation
    *
    * A `BuilderContext` is provided to tweak the component creation progress.
-   * The return value is used as the "export" value of the behavior,
-   * which can be imported by other behaviors.
+   * The return value is used as the "export" value of the behavior.
    */
   override init<TExport extends Record<string, TaggedMethod<(...args: any[]) => any>> | void>(
     func: (
-      this: Component<TData, TProperty, TMethod, TComponentExport, TExtraThisFields>,
+      this: Component<TData, TProperty, TMethod, TExtraThisFields>,
       builderContext: BuilderContext<
         TPrevData,
         TProperty,
-        Component<TData, TProperty, TMethod, TComponentExport, TExtraThisFields>
+        Component<TData, TProperty, TMethod, TExtraThisFields>
       >,
     ) => TExport,
-    // eslint-disable-next-line function-paren-newline
   ): ResolveBehaviorBuilder<
     BehaviorBuilder<
       TPrevData,
@@ -213,8 +212,7 @@ export class BehaviorBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     return super.init(func) as any
   }
@@ -226,13 +224,12 @@ export class BehaviorBuilder<
     TNewMethod extends MethodList = Empty,
     TNewComponentExport = never,
   >(
-    def: BehaviorDefinition<TNewData, TNewProperty, TNewMethod, TNewComponentExport> &
+    definition: ClassicDefinition<TNewData, TNewProperty, TNewMethod> &
       ThisType<
         Component<
           TData & TNewData,
           TProperty & TNewProperty,
           TMethod & TNewMethod,
-          TNewComponentExport,
           TExtraThisFields
         >
       >,
@@ -246,32 +243,17 @@ export class BehaviorBuilder<
       TPendingChainingFilter,
       TNewComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
-    super.definition(def)
-    if (def.definitionFilter) this._$definitionFilter = def.definitionFilter
+    super.definition(definition)
     return this as any
   }
 
   /**
    * Finish the behavior definition process
    */
-  register(): Behavior<
-    TData,
-    TProperty,
-    TMethod,
-    TPendingChainingFilter,
-    TComponentExport,
-    TExtraThisFields
-  > {
-    return new Behavior(
-      this._$.registerBehavior(),
-      this._$parents,
-      this._$definitionFilter,
-      this._$chainingFilter,
-      this._$export,
-    )
+  register(): WechatMiniprogram.Behavior.BehaviorIdentifier<TData, TProperty, TMethod> {
+    return Behavior(this._$definition as any)
   }
 
   /**
@@ -287,8 +269,7 @@ export class BehaviorBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields & T
-    >,
-    TChainingFilter
+    >
   > {
     return this as any
   }

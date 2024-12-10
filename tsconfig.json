@@ -1,6 +1,8 @@
 {
     "compilerOptions": {
         "strict": true,
+        "noImplicitAny": true,
+        "noImplicitThis": true,
         "module": "CommonJS",
         "target": "es5",
         "esModuleInterop": true,
@@ -8,6 +10,7 @@
         "lib": ["ES6", "ES7", "DOM", "ESNext"]
     },
     "include": [
-        "src/**/*.ts"
+        "src/**/*.ts",
+        "test/**/*.ts"
     ]
 }

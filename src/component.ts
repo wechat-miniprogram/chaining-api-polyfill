@@ -1,4 +1,20 @@
-import { BaseBehaviorBuilder, ChainingFilterType, DataList, Empty, MethodList, PropertyList } from './base'
+import {
+  AllData,
+  BaseBehaviorBuilder,
+  BuilderContext,
+  ChainingFilterType,
+  Component as BaseComponent,
+  DataList,
+  Empty,
+  MethodList,
+  NewFieldList,
+  PropertyList,
+  PropertyToData,
+  PropertyType,
+  ResolveBehaviorBuilder,
+  ClassicDefinition,
+} from './base'
+import { TaggedMethod, UnTaggedMethod } from './type_utils'
 
 declare const Component: WechatMiniprogram.Component.Constructor
 
@@ -55,8 +71,8 @@ export class ComponentBuilder<
    *
    * If called multiple times, only the latest call is valid.
    */
-  options(options: ComponentDefinitionOptions): ResolveBehaviorBuilder<this, TChainingFilter> {
-    this._$options = options
+  options(options: WechatMiniprogram.Component.ComponentOptions): ResolveBehaviorBuilder<this> {
+    this._$definition.options = options
     return this as any
   }
 
@@ -65,47 +81,28 @@ export class ComponentBuilder<
     UData extends DataList,
     UProperty extends PropertyList,
     UMethod extends MethodList,
-    UChainingFilter extends ChainingFilterType,
-    UComponentExport,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _UChainingFilter extends ChainingFilterType,
     UExtraThisFields extends DataList,
   >(
-    behavior: Behavior<
-      UData,
-      UProperty,
-      UMethod,
-      UChainingFilter,
-      UComponentExport,
-      UExtraThisFields
-    >,
-  ): ResolveBehaviorBuilder<
-    ComponentBuilder<
-      TPrevData,
-      TData & UData,
-      TProperty & UProperty,
-      TMethod & UMethod,
-      UChainingFilter,
-      TPendingChainingFilter,
-      UComponentExport,
-      TExtraThisFields & UExtraThisFields
-    >,
-    UChainingFilter
+    behavior: WechatMiniprogram.Behavior.Instance<UData, UProperty, UMethod, any, UExtraThisFields>,
+  ): ComponentBuilder<
+    TPrevData,
+    TData & UData,
+    TProperty & UProperty,
+    TMethod & UMethod,
+    TPendingChainingFilter,
+    TChainingFilter,
+    TComponentExport,
+    TExtraThisFields & UExtraThisFields
   > {
-    this._$parents.push(behavior as GeneralBehavior)
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    this._$ = this._$.behavior(behavior._$)
-    if (behavior._$export) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      this._$export = behavior._$export as any
-    }
-    if (behavior._$chainingFilter) {
-      return behavior._$chainingFilter(this as any)
-    }
+    this._$definition.behaviors.push(behavior as any)
     return this as any
   }
 
   /** Set the export value when the component is being selected */
   override export<TNewComponentExport>(
-    f: (this: GeneralComponent, source: GeneralComponent | null) => TNewComponentExport,
+    f: () => TNewComponentExport,
   ): ResolveBehaviorBuilder<
     ComponentBuilder<
       TPrevData,
@@ -116,24 +113,20 @@ export class ComponentBuilder<
       TPendingChainingFilter,
       TNewComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    this._$export = f as any
-    return this as any
+    return super.export(f) as any
   }
 
   /**
    * Add some template data fields
    *
-   * It does not support raw data, but a `gen` function which returns the new data fields.
-   * The `gen` function executes once during component creation.
+   * The data should be JSON-compatible, and will be cloned during component creation.
    */
-  override data<T extends DataList>(
-    gen: () => typeUtils.NewFieldList<AllData<TData, TProperty>, T>,
+  staticData<T extends DataList>(
+    data: NewFieldList<AllData<TData, TProperty>, T>,
   ): ResolveBehaviorBuilder<
-    ComponentBuilder<
+    BaseBehaviorBuilder<
       T,
       TData & T,
       TProperty,
@@ -142,10 +135,9 @@ export class ComponentBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
-    return super.data(gen) as any
+    return super.staticData(data) as any
   }
 
   /**
@@ -153,21 +145,20 @@ export class ComponentBuilder<
    *
    * The property name should be different from other properties.
    */
-  override property<N extends string, T extends PropertyType, V extends PropertyTypeToValueType<T>>(
+  override property<N extends string, T extends PropertyType>(
     name: N,
-    def: N extends keyof (TData & TProperty) ? never : typeUtils.PropertyListItem<T, V>,
+    def: N extends keyof (TData & TProperty) ? never : T,
   ): ResolveBehaviorBuilder<
     ComponentBuilder<
       TPrevData,
       TData,
-      TProperty & Record<N, unknown extends V ? T : typeUtils.PropertyOption<T, V>>,
+      TProperty & Record<N, PropertyToData<T>>,
       TMethod,
       TChainingFilter,
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     return super.property(name, def) as any
   }
@@ -178,7 +169,7 @@ export class ComponentBuilder<
    * The public method can be used as an event handler, and can be visited in component instance.
    */
   override methods<T extends MethodList>(
-    funcs: T & ThisType<Component<TData, TProperty, TMethod & T, any, TExtraThisFields>>,
+    funcs: T & ThisType<BaseComponent<TData, TProperty, TMethod, TExtraThisFields>>,
   ): ResolveBehaviorBuilder<
     ComponentBuilder<
       TPrevData,
@@ -189,8 +180,7 @@ export class ComponentBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     return super.methods(funcs) as any
   }
@@ -204,14 +194,13 @@ export class ComponentBuilder<
    */
   override init<TExport extends Record<string, TaggedMethod<(...args: any[]) => any>> | void>(
     func: (
-      this: Component<TData, TProperty, TMethod, TComponentExport, TExtraThisFields>,
+      this: BaseComponent<TData, TProperty, TMethod, TExtraThisFields>,
       builderContext: BuilderContext<
         TPrevData,
         TProperty,
-        Component<TData, TProperty, TMethod, TComponentExport, TExtraThisFields>
+        BaseComponent<TData, TProperty, TMethod, TExtraThisFields>
       >,
     ) => TExport,
-    // eslint-disable-next-line function-paren-newline
   ): ResolveBehaviorBuilder<
     ComponentBuilder<
       TPrevData,
@@ -227,8 +216,7 @@ export class ComponentBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     return super.init(func) as any
   }
@@ -240,13 +228,12 @@ export class ComponentBuilder<
     TNewMethod extends MethodList = Empty,
     TNewComponentExport = never,
   >(
-    def: ComponentDefinition<TNewData, TNewProperty, TNewMethod, TNewComponentExport> &
+    definition: ClassicDefinition<TNewData, TNewProperty, TNewMethod> &
       ThisType<
-        Component<
+        BaseComponent<
           TData & TNewData,
           TProperty & TNewProperty,
           TMethod & TNewMethod,
-          TNewComponentExport,
           TExtraThisFields
         >
       >,
@@ -260,96 +247,18 @@ export class ComponentBuilder<
       TPendingChainingFilter,
       TNewComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
-    super.definition(def)
-    if (def.options) this.options(def.options)
-    return this as any
-  }
-
-  pageDefinition<TNewData extends DataList, TNewExtraFields extends { [k: PropertyKey]: any }>(
-    def: PageDefinition<TNewData, TNewExtraFields> &
-      ThisType<
-        Component<
-          TData & TNewData,
-          TProperty,
-          TMethod & TNewExtraFields,
-          undefined,
-          TExtraThisFields
-        >
-      >,
-  ): ResolveBehaviorBuilder<
-    ComponentBuilder<
-      TPrevData,
-      TData & TNewData,
-      TProperty,
-      TMethod & TNewExtraFields,
-      TChainingFilter,
-      TPendingChainingFilter,
-      TComponentExport,
-      TExtraThisFields
-    >,
-    TChainingFilter
-  > {
-    const customFields = Object.create(null) as { [k: string]: unknown }
-    const compDef = {
-      methods: {},
-    } as { [k: string]: any }
-    const keys = Object.keys(def)
-    for (let i = 0; i < keys.length; i += 1) {
-      const k = keys[i]!
-      if (k === 'data') {
-        compDef.data = def.data
-      } else if (typeof def[k] === 'function') {
-        ;(compDef.methods as { [k: string]: unknown })[k] = def[k] as unknown
-      } else if (k === 'methods') {
-        customFields.methods = def.methods
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        compDef[k] = def[k]
-      }
-    }
-    this.definition(compDef)
-    const keys2 = Object.keys(compDef)
-    for (let i = 0; i < keys2.length; i += 1) {
-      const k = keys2[i]!
-      if (k === 'data' || k === 'methods' || k === 'behaviors') continue
-      customFields[k] = compDef[k]
-    }
-    this._$.init(function () {
-      Object.assign(this, glassEasel.dataUtils.simpleDeepCopy(customFields))
-    })
+    super.definition(definition)
+    if (definition.options) this.options(definition.options)
     return this as any
   }
 
   /**
    * Finish the component definition process
    */
-  register(): ComponentType<TData, TProperty, TMethod, TComponentExport> {
-    const is = this._$is
-    const codeSpace = this._$codeSpace
-
-    // processing common fields
-    const [options, styleIsolation] = codeSpace.prepareComponentOptions(is, this._$options)
-    this._$.options(options)
-    const staticConfig = codeSpace.getComponentStaticConfig(is)
-    const using = staticConfig?.usingComponents
-    const generics = staticConfig?.componentGenerics
-    const placeholder = staticConfig?.componentPlaceholder
-    if (using) this._$.usingComponents(using)
-    if (generics) this._$.generics(generics)
-    if (placeholder) this._$.placeholders(placeholder)
-    const template = codeSpace.getCompiledTemplate(is)
-    if (template) this._$.template(template)
-
-    // do registration
-    codeSpace._$styleIsolationMap[is] = styleIsolation
-    const compDef = this._$.registerComponent()
-    this._$alias?.forEach((alias) => {
-      this._$codeSpace.getComponentSpace().exportComponent(alias, this._$is)
-    })
-    return new ComponentType(compDef)
+  register(): string {
+    return Component(this._$definition as any)
   }
 
   /**
@@ -365,8 +274,7 @@ export class ComponentBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields & T
-    >,
-    TChainingFilter
+    >
   > {
     return this as any
   }
