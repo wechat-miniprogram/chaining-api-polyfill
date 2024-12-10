@@ -1,4 +1,3 @@
-import { typeUtils } from 'glass-easel'
 import { TraitBehavior } from './trait_behavior'
 import {
   BaseBehaviorBuilder,

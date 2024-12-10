@@ -1,17 +1,30 @@
-import { type typeUtils } from 'glass-easel'
+import { GeneralFuncType, FuncArr } from './func_arr'
 import { TraitBehavior, TraitGroup } from './trait_behavior'
+import {
+  GetFromObserverPathString,
+  METHOD_TAG,
+  ObserverDataPathStrings,
+  SetDataSetter,
+  TaggedMethod,
+  UnTaggedMethod,
+} from './type_utils'
 
-export type Empty = typeUtils.Empty
+export type Empty = Record<never, never>
 export type DataList = WechatMiniprogram.Behavior.DataOption
 export type PropertyList = WechatMiniprogram.Behavior.PropertyOption
 export type MethodList = WechatMiniprogram.Behavior.MethodOption
-export type ChainingFilterType = typeUtils.ChainingFilterType
+export type ChainingFilterType = {
+  add: { [key: string]: any }
+  remove: string
+}
 export type AllData<TData extends DataList, TProperty extends PropertyList> = TData &
   WechatMiniprogram.Component.PropertyOptionToData<TProperty>
-export type PropertyType = typeUtils.PropertyType
-export type PropertyTypeToValueType<T extends PropertyType> = typeUtils.PropertyTypeToValueType<T>
-export type ComponentMethod = typeUtils.ComponentMethod
+export type PropertyType = WechatMiniprogram.Component.AllProperty
+export type PropertyToData<T extends PropertyType> = WechatMiniprogram.Component.PropertyToData<T>
 type IAnyObject = WechatMiniprogram.IAnyObject
+
+type NewFieldList<TObject, TNewObject> =
+  Extract<keyof TObject, keyof TNewObject> extends never ? TNewObject : never
 
 type Lifetimes = {
   created: () => void
@@ -36,20 +49,9 @@ export type Component<
   TExtraThisFields extends DataList = Empty,
 > = WechatMiniprogram.Component.Instance<TData, TProperty, TMethod, []> & TExtraThisFields
 
-export type ResolveBehaviorBuilder<B, TChainingFilter extends ChainingFilterType> =
-  typeUtils.IsNever<TChainingFilter> extends false
-    ? TChainingFilter extends ChainingFilterType
-      ? Omit<B, TChainingFilter['remove']> & TChainingFilter['add']
-      : B
-    : B
+export type ComponentMethod = (...any: []) => void
 
-type ObserverFunction = (...args: any[]) => void
-
-export type TaggedMethod<Fn extends ComponentMethod> = typeUtils.TaggedMethod<Fn>
-
-export type UnTaggedMethod<M extends TaggedMethod<any>> = typeUtils.UnTaggedMethod<M>
-
-export const METHOD_TAG = Symbol('method')
+export type ResolveBehaviorBuilder<B> = B
 
 const tagMethod = <Fn extends ComponentMethod>(func: Fn): TaggedMethod<Fn> => {
   const taggedMethod = func as unknown as TaggedMethod<Fn>
@@ -62,17 +64,18 @@ const isTaggedMethod = (func: unknown): func is TaggedMethod<ComponentMethod> =>
 }
 
 type ChainingPolyfillInitData = {
-  lifetimes: { [key: string]: ObserverFunction[] }
-  pageLifetimes: { [key: string]: ObserverFunction[] }
-  observers: { [key: string]: ObserverFunction[] }
-  initFuncs: ObserverFunction[]
+  lifetimes: { [key: string]: FuncArr<GeneralFuncType> }
+  pageLifetimes: { [key: string]: FuncArr<GeneralFuncType> }
+  observers: { [key: string]: FuncArr<GeneralFuncType> }
+  initFuncs: FuncArr<GeneralFuncType>
 }
 
 class ChainingPolyfillMetadata {
+  initDone = false
   traitGroup = new TraitGroup()
-  lifetimes: { [key: string]: ObserverFunction[] }
-  pageLifetimes: { [key: string]: ObserverFunction[] }
-  observers: { [key: string]: ObserverFunction[] }
+  lifetimes: { [key: string]: FuncArr<GeneralFuncType> }
+  pageLifetimes: { [key: string]: FuncArr<GeneralFuncType> }
+  observers: { [key: string]: FuncArr<GeneralFuncType> }
 
   constructor(init: ChainingPolyfillInitData) {
     this.lifetimes = init.lifetimes
@@ -80,27 +83,48 @@ class ChainingPolyfillMetadata {
     this.observers = init.observers
   }
 
+  setInitDone() {
+    this.initDone = true
+  }
+
   generateBuilderContext(self: GeneralComponent): BuilderContext<any, any, any> {
     return {
       self,
       data: self.data,
-      setData: self.setData.bind(self),
+      setData: (data, callback) => {
+        if (!this.initDone) {
+          throw new Error('Cannot set-data before initialization done')
+        }
+        self.setData(data, callback)
+      },
       implement: (trait_behavior: TraitBehavior<any, any>, impl: any) => {
+        if (this.initDone) {
+          throw new Error('Cannot execute init-time functions after initialization')
+        }
         this.traitGroup.implement(trait_behavior, impl)
       },
       observer: () => {
+        if (this.initDone) {
+          throw new Error('Cannot execute init-time functions after initialization')
+        }
         // TODO
       },
       lifetime: (name: string, func: () => void) => {
-        if (!this.lifetimes[name]) this.lifetimes[name] = []
-        this.lifetimes[name].push(func)
+        if (this.initDone) {
+          throw new Error('Cannot execute init-time functions after initialization')
+        }
+        if (!this.lifetimes[name]) this.lifetimes[name] = new FuncArr()
+        this.lifetimes[name].add(func)
       },
       pageLifetime: (name: string, func: () => void) => {
-        if (!this.pageLifetimes[name]) this.pageLifetimes[name] = []
-        this.pageLifetimes[name].push(func)
+        if (this.initDone) {
+          throw new Error('Cannot execute init-time functions after initialization')
+        }
+        if (!this.pageLifetimes[name]) this.pageLifetimes[name] = new FuncArr()
+        this.pageLifetimes[name].add(func)
       },
       method: tagMethod,
-      listener: tagMethod,
+      listener: tagMethod as any,
     }
   }
 
@@ -116,6 +140,16 @@ class ChainingPolyfillMetadata {
       }
     }
   }
+
+  callLifetime(caller: unknown, name: string, ...args: any[]) {
+    const funcs = getChainingPolyfillMetadata(self).lifetimes[name] ?? []
+    funcs.call(caller, args)
+  }
+
+  callPageLifetime(caller: unknown, name: string, ...args: any[]) {
+    const funcs = getChainingPolyfillMetadata(self).pageLifetimes[name] ?? []
+    funcs.call(caller, args)
+  }
 }
 
 const getChainingPolyfillMetadata = (comp: GeneralComponent): ChainingPolyfillMetadata => {
@@ -123,25 +157,44 @@ const getChainingPolyfillMetadata = (comp: GeneralComponent): ChainingPolyfillMe
 }
 
 const chainingPolyfillBehavior = Behavior({
-  created() {
-    const self = this as any
-    if (self.data._$chainingPolyfillMetadata) {
-      const initData = self.data._$chainingPolyfillMetadata as ChainingPolyfillInitData
-      self.data._$chainingPolyfillMetadata = null
-      const chainingPolyfillMetadata = new ChainingPolyfillMetadata(initData)
-      self._$chainingPolyfill = chainingPolyfillMetadata
-      const ctx = chainingPolyfillMetadata.generateBuilderContext(self)
-      initData.initFuncs.forEach((f) => {
-        const exported = f(ctx)
-        chainingPolyfillMetadata.handleBuilderContextExport(self, exported)
-      })
-    }
-    const created = getChainingPolyfillMetadata(self).lifetimes.created ?? []
-    for (let i = 0; i < created.length; i += 1) {
-      created[i].call(self)
-    }
+  lifetimes: {
+    created() {
+      const self = this as any
+      if (self.data._$chainingPolyfillMetadata) {
+        const initData = self.data._$chainingPolyfillMetadata as ChainingPolyfillInitData
+        self.data._$chainingPolyfillMetadata = null
+        const chainingPolyfillMetadata = new ChainingPolyfillMetadata(initData)
+        self._$chainingPolyfill = chainingPolyfillMetadata
+        const ctx = chainingPolyfillMetadata.generateBuilderContext(self)
+        initData.initFuncs.call(self, [ctx, chainingPolyfillMetadata])
+        chainingPolyfillMetadata.setInitDone()
+      }
+      getChainingPolyfillMetadata(this).callLifetime(this, 'created')
+    },
+    attached() {
+      getChainingPolyfillMetadata(this).callLifetime(this, 'attached')
+    },
+    moved() {
+      getChainingPolyfillMetadata(this).callLifetime(this, 'moved')
+    },
+    detached() {
+      getChainingPolyfillMetadata(this).callLifetime(this, 'detached')
+    },
+    ready() {
+      getChainingPolyfillMetadata(this).callLifetime(this, 'ready')
+    },
   },
-  // TODO
+  pageLifetimes: {
+    show() {
+      getChainingPolyfillMetadata(this).callPageLifetime(this, 'show')
+    },
+    hide() {
+      getChainingPolyfillMetadata(this).callPageLifetime(this, 'hide')
+    },
+    resize(size) {
+      getChainingPolyfillMetadata(this).callPageLifetime(this, 'resize', size)
+    },
+  },
 })
 
 export class BaseBehaviorBuilder<
@@ -161,12 +214,13 @@ export class BaseBehaviorBuilder<
         observers: {},
       } as ChainingPolyfillInitData,
     } as DataList,
-    properties: {} as typeUtils.PropertyListItem<any, any>,
+    properties: {} as WechatMiniprogram.Behavior.PropertyOption,
     methods: {} as MethodList,
     behaviors: [chainingPolyfillBehavior],
-    lifetimes: {} as { [key: string]: ObserverFunction },
-    pageLifetimes: {} as { [key: string]: ObserverFunction },
-    observers: [] as { fields: string; observer: ObserverFunction }[],
+    lifetimes: {} as { [key: string]: GeneralFuncType },
+    pageLifetimes: {} as { [key: string]: GeneralFuncType },
+    observers: [] as { fields: string; observer: GeneralFuncType }[],
+    relations: {} as { [key: string]: WechatMiniprogram.Component.RelationOption },
     externalClasses: [] as string[],
     export: undefined as undefined | (() => TComponentExport),
   }
@@ -196,8 +250,7 @@ export class BaseBehaviorBuilder<
       TPendingChainingFilter,
       TNewComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     if (!this._$definition.export) this._$definition.behaviors.unshift('wx://component-export')
     this._$definition.export = f as any
@@ -205,7 +258,7 @@ export class BaseBehaviorBuilder<
   }
 
   staticData<T extends DataList>(
-    data: typeUtils.NewFieldList<AllData<TData, TProperty>, T>,
+    data: NewFieldList<AllData<TData, TProperty>, T>,
   ): ResolveBehaviorBuilder<
     BaseBehaviorBuilder<
       T,
@@ -216,28 +269,26 @@ export class BaseBehaviorBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     Object.assign(this._$definition.data, data)
     return this as any
   }
 
-  property<N extends string, T extends PropertyType, V extends PropertyTypeToValueType<T>>(
+  property<N extends string, T extends PropertyType>(
     name: N,
-    def: N extends keyof (TData & TProperty) ? never : typeUtils.PropertyListItem<T, V>,
+    def: N extends keyof (TData & TProperty) ? never : T,
   ): ResolveBehaviorBuilder<
     BaseBehaviorBuilder<
       TPrevData,
       TData,
-      TProperty & Record<N, unknown extends V ? T : typeUtils.PropertyOption<T, V>>,
+      TProperty & Record<N, PropertyToData<T>>,
       TMethod,
       TChainingFilter,
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     this._$definition.properties[name] = def
     return this as any
@@ -260,8 +311,7 @@ export class BaseBehaviorBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
     Object.assign(this._$definition.methods, funcs)
     return this as any
@@ -271,16 +321,16 @@ export class BaseBehaviorBuilder<
    * Add a data observer
    */
   observer<
-    P extends typeUtils.ObserverDataPathStrings<AllData<TPrevData, TProperty>>,
-    V = typeUtils.GetFromObserverPathString<AllData<TPrevData, TProperty>, P>,
+    P extends ObserverDataPathStrings<AllData<TPrevData, TProperty>>,
+    V = GetFromObserverPathString<AllData<TPrevData, TProperty>, P>,
   >(
     paths: P,
     func: (this: Component<TData, TProperty, TMethod, TExtraThisFields>, newValue: V) => void,
-  ): ResolveBehaviorBuilder<this, TChainingFilter>
+  ): ResolveBehaviorBuilder<this>
   observer<
-    P extends typeUtils.ObserverDataPathStrings<AllData<TPrevData, TProperty>>[],
+    P extends ObserverDataPathStrings<AllData<TPrevData, TProperty>>[],
     V = {
-      [K in keyof P]: typeUtils.GetFromObserverPathString<AllData<TPrevData, TProperty>, P[K]>
+      [K in keyof P]: GetFromObserverPathString<AllData<TPrevData, TProperty>, P[K]>
     },
   >(
     paths: readonly [...P],
@@ -288,11 +338,11 @@ export class BaseBehaviorBuilder<
       this: Component<TData, TProperty, TMethod, TExtraThisFields>,
       ...newValues: V extends any[] ? V : never
     ) => void,
-  ): ResolveBehaviorBuilder<this, TChainingFilter>
+  ): ResolveBehaviorBuilder<this>
   observer(
     paths: string | readonly string[],
     func: (this: Component<TData, TProperty, TMethod, TExtraThisFields>, ...args: any[]) => any,
-  ): ResolveBehaviorBuilder<this, TChainingFilter> {
+  ): ResolveBehaviorBuilder<this> {
     const fields = typeof paths === 'string' ? paths : paths.join(', ')
     this._$definition.observers.push({ fields, observer: func })
     return this as any
@@ -307,12 +357,12 @@ export class BaseBehaviorBuilder<
       this: Component<TData, TProperty, TMethod, TExtraThisFields>,
       ...args: Parameters<Lifetimes[L]>
     ) => ReturnType<Lifetimes[L]>,
-  ): ResolveBehaviorBuilder<this, TChainingFilter> {
+  ): ResolveBehaviorBuilder<this> {
     const lifetimes = this._$getChainingPolyfillInitData().lifetimes
     if (!lifetimes[name]) {
-      lifetimes[name] = []
+      lifetimes[name] = new FuncArr()
     }
-    lifetimes[name].push(func)
+    lifetimes[name].add(func)
     return this as any
   }
 
@@ -325,12 +375,24 @@ export class BaseBehaviorBuilder<
       this: Component<TData, TProperty, TMethod, TExtraThisFields>,
       ...args: Parameters<PageLifetimes[L]>
     ) => any,
-  ): ResolveBehaviorBuilder<this, TChainingFilter> {
+  ): ResolveBehaviorBuilder<this> {
     const pageLifetimes = this._$getChainingPolyfillInitData().pageLifetimes
     if (!pageLifetimes[name]) {
-      pageLifetimes[name] = []
+      pageLifetimes[name] = new FuncArr()
     }
-    pageLifetimes[name].push(func)
+    pageLifetimes[name].add(func)
+    return this as any
+  }
+
+  /**
+   * Add a relation
+   */
+  relation(
+    name: string,
+    rel: WechatMiniprogram.Component.RelationOption &
+      ThisType<Component<TData, TProperty, TMethod, TExtraThisFields>>,
+  ): ResolveBehaviorBuilder<this> {
+    this._$definition.relations[name] = rel
     return this as any
   }
 
@@ -358,10 +420,13 @@ export class BaseBehaviorBuilder<
       TPendingChainingFilter,
       TComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
-    this._$getChainingPolyfillInitData().initFuncs.push(func)
+    this._$getChainingPolyfillInitData().initFuncs.add((ctx, meta: ChainingPolyfillMetadata) => {
+      const comp = ctx.self
+      const exported = func.call(comp, ctx)
+      meta.handleBuilderContextExport(comp, exported)
+    })
     return this as any
   }
 
@@ -390,10 +455,71 @@ export class BaseBehaviorBuilder<
       TPendingChainingFilter,
       TNewComponentExport,
       TExtraThisFields
-    >,
-    TChainingFilter
+    >
   > {
-    // TODO
+    const {
+      behaviors,
+      properties: rawProperties,
+      data: rawData,
+      observers: rawObservers,
+      methods,
+      created,
+      attached,
+      ready,
+      moved,
+      detached,
+      lifetimes: rawLifetimes,
+      pageLifetimes: rawPageLifetimes,
+      relations: rawRelations,
+      externalClasses,
+      export: exports,
+    } = definition
+    if (behaviors) {
+      this._$definition.behaviors.push(...behaviors)
+    }
+    if (rawProperties) {
+      Object.assign(this._$definition.properties, rawProperties)
+    }
+    Object.assign(this._$definition.data, rawData)
+    if (rawObservers !== undefined) {
+      if (Array.isArray(rawObservers)) {
+        this._$definition.observers.push(...rawObservers)
+      } else {
+        const keys = Object.keys(rawObservers)
+        for (let i = 0; i < keys.length; i += 1) {
+          const fields = keys[i]!
+          const observer = rawObservers[fields]!
+          this._$definition.observers.push({ fields, observer })
+        }
+      }
+    }
+    if (methods) this.methods(methods)
+    if (created && rawLifetimes?.created === undefined) this.lifetime('created', created)
+    if (attached && rawLifetimes?.attached === undefined) this.lifetime('attached', attached)
+    if (ready && rawLifetimes?.ready === undefined) this.lifetime('ready', ready)
+    if (moved && rawLifetimes?.moved === undefined) this.lifetime('moved', moved)
+    if (detached && rawLifetimes?.detached === undefined) this.lifetime('detached', detached)
+    if (rawLifetimes) {
+      const keys = Object.keys(rawLifetimes)
+      for (let i = 0; i < keys.length; i += 1) {
+        const name = keys[i]!
+        const func = (rawLifetimes as any)[name]
+        this.lifetime(name as any, func)
+      }
+    }
+    if (rawPageLifetimes) {
+      const keys = Object.keys(rawPageLifetimes)
+      for (let i = 0; i < keys.length; i += 1) {
+        const name = keys[i]!
+        const func = (rawPageLifetimes as any)[name]!
+        this.pageLifetime(name as any, func)
+      }
+    }
+    if (rawRelations) {
+      Object.assign(this._$definition.relations, rawRelations)
+    }
+    if (externalClasses) this.externalClasses(externalClasses)
+    if (exports) this.export(exports)
     return this as any
   }
 }
@@ -405,28 +531,24 @@ export interface BuilderContext<
 > extends ThisType<TMethodCaller> {
   self: TMethodCaller
   data: AllData<TPrevData, TProperty>
-  setData: (
-    this: void,
-    newData: Partial<typeUtils.SetDataSetter<TPrevData>>,
-    callback?: () => void,
-  ) => void
+  setData: (this: void, newData: Partial<SetDataSetter<TPrevData>>, callback?: () => void) => void
   implement: <TIn extends { [x: string]: any }>(
     this: void,
     traitBehavior: TraitBehavior<TIn, any>,
     impl: TIn,
   ) => void
   observer<
-    P extends typeUtils.ObserverDataPathStrings<AllData<TPrevData, TProperty>>,
-    V = typeUtils.GetFromObserverPathString<AllData<TPrevData, TProperty>, P>,
+    P extends ObserverDataPathStrings<AllData<TPrevData, TProperty>>,
+    V = GetFromObserverPathString<AllData<TPrevData, TProperty>, P>,
   >(
     this: void,
     paths: P,
     func: (newValue: V) => void,
   ): void
   observer<
-    P extends typeUtils.ObserverDataPathStrings<AllData<TPrevData, TProperty>>[],
+    P extends ObserverDataPathStrings<AllData<TPrevData, TProperty>>[],
     V = {
-      [K in keyof P]: typeUtils.GetFromObserverPathString<AllData<TPrevData, TProperty>, P[K]>
+      [K in keyof P]: GetFromObserverPathString<AllData<TPrevData, TProperty>, P[K]>
     },
   >(
     this: void,
