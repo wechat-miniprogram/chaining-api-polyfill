@@ -9,7 +9,6 @@ import {
   MethodList,
   NewFieldList,
   PropertyList,
-  PropertyToData,
   PropertyType,
   ResolveBehaviorBuilder,
   ClassicDefinition,
@@ -85,7 +84,7 @@ export class ComponentBuilder<
     _UChainingFilter extends ChainingFilterType,
     UExtraThisFields extends DataList,
   >(
-    behavior: WechatMiniprogram.Behavior.Instance<UData, UProperty, UMethod, any, UExtraThisFields>,
+    behavior: WechatMiniprogram.Behavior.BehaviorIdentifier<UData, UProperty, UMethod, []>,
   ): ComponentBuilder<
     TPrevData,
     TData & UData,
@@ -123,10 +122,10 @@ export class ComponentBuilder<
    *
    * The data should be JSON-compatible, and will be cloned during component creation.
    */
-  staticData<T extends DataList>(
+  override staticData<T extends DataList>(
     data: NewFieldList<AllData<TData, TProperty>, T>,
   ): ResolveBehaviorBuilder<
-    BaseBehaviorBuilder<
+    ComponentBuilder<
       T,
       TData & T,
       TProperty,
@@ -152,7 +151,7 @@ export class ComponentBuilder<
     ComponentBuilder<
       TPrevData,
       TData,
-      TProperty & Record<N, PropertyToData<T>>,
+      TProperty & Record<N, T>,
       TMethod,
       TChainingFilter,
       TPendingChainingFilter,

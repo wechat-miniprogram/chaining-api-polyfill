@@ -5,7 +5,7 @@ const prettierRecommended = require('eslint-plugin-prettier/recommended')
 const promise = require('eslint-plugin-promise')
 
 const tsconfig = tseslint.config({
-  files: ["src/**/*.[jt]s", "dist/**/*.[jt]s"],
+  files: ["src/**/*.[jt]s", "test/**/*.[jt]s"],
   extends: [
     js.configs.recommended,
     promise.configs['flat/recommended'],

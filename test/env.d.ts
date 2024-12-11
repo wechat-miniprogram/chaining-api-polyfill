@@ -13,3 +13,5 @@ export const defineComponent: (
 ) => adapter.component.GeneralComponent
 
 export const waitTick: () => Promise<void>
+
+export const innerHTML: (comp: adapter.component.GeneralComponent) => string

@@ -37,7 +37,7 @@ type Lifetimes = {
 type PageLifetimes = {
   show: () => void
   hide: () => void
-  resize: (size: { width: number; height: number }) => void
+  resize: (size: WechatMiniprogram.Page.IResizeOption) => void
 }
 
 export type GeneralComponent = Component<any, any, any, any>
@@ -83,9 +83,18 @@ class ChainingPolyfillMetadata {
   observers: { [key: string]: FuncArr<GeneralFuncType> }
 
   constructor(init: ChainingPolyfillInitData) {
-    this.lifetimes = init.lifetimes
-    this.pageLifetimes = init.pageLifetimes
-    this.observers = init.observers
+    const cloneMap = (src: { [k: string]: FuncArr<any> }) => {
+      const dest = {} as typeof src
+      const keys = Object.keys(src)
+      for (let i = 0; i < keys.length; i += 1) {
+        const key = keys[i]!
+        dest[key] = src[key].clone()
+      }
+      return dest
+    }
+    this.lifetimes = cloneMap(init.lifetimes)
+    this.pageLifetimes = cloneMap(init.pageLifetimes)
+    this.observers = cloneMap(init.observers)
   }
 
   setInitDone() {
@@ -170,55 +179,50 @@ const getChainingPolyfillMetadata = (comp: GeneralComponent): ChainingPolyfillMe
   return comp._$chainingPolyfill
 }
 
-const takeChainingPolyfillInitData = (
-  comp: GeneralComponent,
-): ChainingPolyfillInitData | undefined => {
-  const id = comp.data._$chainingPolyfillId
-  if (!(id >= 0)) return undefined
-  comp.data._$chainingPolyfillId = -1
-  const initData = initDataMap[id]
-  const cloneMap = (src: { [k: string]: FuncArr<any> }) => {
-    const dest = {} as typeof src
-    const keys = Object.keys(src)
-    for (let i = 0; i < keys.length; i += 1) {
-      const key = keys[i]!
-      dest[key] = src[key].clone()
-    }
-    return dest
-  }
-  return {
-    lifetimes: cloneMap(initData.lifetimes),
-    pageLifetimes: cloneMap(initData.lifetimes),
-    observers: cloneMap(initData.observers),
-    initFuncs: initData.initFuncs.clone(),
-  }
-}
+// const takeChainingPolyfillInitData = (
+//   comp: GeneralComponent,
+// ): ChainingPolyfillInitData | undefined => {
+//   const id = comp.data._$chainingPolyfillId
+//   if (!(id >= 0)) return undefined
+//   comp.data._$chainingPolyfillId = -1
+//   const initData = initDataMap[id]
+//   const cloneMap = (src: { [k: string]: FuncArr<any> }) => {
+//     const dest = {} as typeof src
+//     const keys = Object.keys(src)
+//     for (let i = 0; i < keys.length; i += 1) {
+//       const key = keys[i]!
+//       dest[key] = src[key].clone()
+//     }
+//     return dest
+//   }
+//   return {
+//     lifetimes: cloneMap(initData.lifetimes),
+//     pageLifetimes: cloneMap(initData.pageLifetimes),
+//     observers: cloneMap(initData.observers),
+//     initFuncs: initData.initFuncs.clone(),
+//   }
+// }
 
-const chainingPolyfillBehavior = Behavior({
-  lifetimes: {
-    created() {
-      const self = this as any
-      const initData = takeChainingPolyfillInitData(self)
-      if (initData) {
+const generateChainingPolyfillBehavior = (initData: ChainingPolyfillInitData) => {
+  return Behavior({
+    lifetimes: {
+      created() {
         const chainingPolyfillMetadata = new ChainingPolyfillMetadata(initData)
-        self._$chainingPolyfill = chainingPolyfillMetadata
-        const ctx = chainingPolyfillMetadata.generateBuilderContext(self)
-        initData.initFuncs.call(self, [ctx, chainingPolyfillMetadata])
+        ;(this as any)._$chainingPolyfill = chainingPolyfillMetadata
+        const ctx = chainingPolyfillMetadata.generateBuilderContext(this as any)
+        initData.initFuncs.call(this, [ctx, chainingPolyfillMetadata])
         chainingPolyfillMetadata.setInitDone()
-      }
+      },
     },
-  },
-  methods: {
-    traitBehavior<TOut extends { [x: string]: any }>(
-      traitBehavior: TraitBehavior<any, TOut>,
-    ): TOut | undefined {
-      return getChainingPolyfillMetadata(this).traitGroup.get(traitBehavior)
+    methods: {
+      traitBehavior<TOut extends { [x: string]: any }>(
+        traitBehavior: TraitBehavior<any, TOut>,
+      ): TOut | undefined {
+        return getChainingPolyfillMetadata(this).traitGroup.get(traitBehavior)
+      },
     },
-  },
-})
-
-let behaviorIdInc = 1
-const initDataMap: { [id: number]: ChainingPolyfillInitData } = {}
+  })
+}
 
 export class BaseBehaviorBuilder<
   TPrevData extends DataList = Empty,
@@ -230,7 +234,6 @@ export class BaseBehaviorBuilder<
   TComponentExport = never,
   TExtraThisFields extends DataList = Empty,
 > {
-  behaviorId: number
   private _$initData = {
     lifetimes: {},
     pageLifetimes: {},
@@ -241,7 +244,7 @@ export class BaseBehaviorBuilder<
     data: {} as DataList,
     properties: {} as WechatMiniprogram.Behavior.PropertyOption,
     methods: {} as MethodList,
-    behaviors: [chainingPolyfillBehavior],
+    behaviors: [generateChainingPolyfillBehavior(this._$initData)],
     lifetimes: {
       created() {
         getChainingPolyfillMetadata(this).callLifetime(this, 'created')
@@ -278,10 +281,8 @@ export class BaseBehaviorBuilder<
   }
 
   constructor() {
-    this.behaviorId = behaviorIdInc
-    behaviorIdInc += 1
-    this._$definition.data._$chainingPolyfillId = this.behaviorId
-    initDataMap[this.behaviorId] = this._$initData
+    // make observer '**' automatically available
+    this.observer('**', () => {})
   }
 
   /** Add external classes */
@@ -292,7 +293,6 @@ export class BaseBehaviorBuilder<
     return this
   }
 
-  /** Set the export value when the component is being selected */
   export<TNewComponentExport>(
     f: () => TNewComponentExport,
   ): ResolveBehaviorBuilder<
@@ -337,7 +337,7 @@ export class BaseBehaviorBuilder<
     BaseBehaviorBuilder<
       TPrevData,
       TData,
-      TProperty & Record<N, PropertyToData<T>>,
+      TProperty & Record<N, T>,
       TMethod,
       TChainingFilter,
       TPendingChainingFilter,

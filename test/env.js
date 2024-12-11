@@ -9,3 +9,7 @@ exports.waitTick = () => {
     }, 100)
   })
 }
+
+exports.innerHTML = (component) => {
+  return component._$.$$.innerHTML
+}
