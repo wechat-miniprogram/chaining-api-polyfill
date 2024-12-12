@@ -1,3 +1,4 @@
+import { isMiniProgramEnvironment } from '.'
 import { GeneralFuncType, FuncArr } from './func_arr'
 import { TraitBehavior, TraitGroup } from './trait_behavior'
 import {
@@ -156,7 +157,7 @@ class ChainingPolyfillMetadata {
         const exportedKey = exportedKeys[j]!
         const exportItem = (exported as { [k in string]: unknown })[exportedKey]
         if (isTaggedMethod(exportItem)) {
-          comp.methods[exportedKey] = exportItem
+          comp[exportedKey] = exportItem
         }
       }
     }
@@ -175,55 +176,6 @@ class ChainingPolyfillMetadata {
   }
 }
 
-const getChainingPolyfillMetadata = (comp: GeneralComponent): ChainingPolyfillMetadata => {
-  return comp._$chainingPolyfill
-}
-
-// const takeChainingPolyfillInitData = (
-//   comp: GeneralComponent,
-// ): ChainingPolyfillInitData | undefined => {
-//   const id = comp.data._$chainingPolyfillId
-//   if (!(id >= 0)) return undefined
-//   comp.data._$chainingPolyfillId = -1
-//   const initData = initDataMap[id]
-//   const cloneMap = (src: { [k: string]: FuncArr<any> }) => {
-//     const dest = {} as typeof src
-//     const keys = Object.keys(src)
-//     for (let i = 0; i < keys.length; i += 1) {
-//       const key = keys[i]!
-//       dest[key] = src[key].clone()
-//     }
-//     return dest
-//   }
-//   return {
-//     lifetimes: cloneMap(initData.lifetimes),
-//     pageLifetimes: cloneMap(initData.pageLifetimes),
-//     observers: cloneMap(initData.observers),
-//     initFuncs: initData.initFuncs.clone(),
-//   }
-// }
-
-const generateChainingPolyfillBehavior = (initData: ChainingPolyfillInitData) => {
-  return Behavior({
-    lifetimes: {
-      created() {
-        const chainingPolyfillMetadata = new ChainingPolyfillMetadata(initData)
-        ;(this as any)._$chainingPolyfill = chainingPolyfillMetadata
-        const ctx = chainingPolyfillMetadata.generateBuilderContext(this as any)
-        initData.initFuncs.call(this, [ctx, chainingPolyfillMetadata])
-        chainingPolyfillMetadata.setInitDone()
-      },
-    },
-    methods: {
-      traitBehavior<TOut extends { [x: string]: any }>(
-        traitBehavior: TraitBehavior<any, TOut>,
-      ): TOut | undefined {
-        return getChainingPolyfillMetadata(this).traitGroup.get(traitBehavior)
-      },
-    },
-  })
-}
-
 export class BaseBehaviorBuilder<
   TPrevData extends DataList = Empty,
   TData extends DataList = Empty,
@@ -234,6 +186,7 @@ export class BaseBehaviorBuilder<
   TComponentExport = never,
   TExtraThisFields extends DataList = Empty,
 > {
+  private _$instanceMap: WeakMap<GeneralComponent, ChainingPolyfillMetadata> = new WeakMap()
   private _$initData = {
     lifetimes: {},
     pageLifetimes: {},
@@ -244,35 +197,9 @@ export class BaseBehaviorBuilder<
     data: {} as DataList,
     properties: {} as WechatMiniprogram.Behavior.PropertyOption,
     methods: {} as MethodList,
-    behaviors: [generateChainingPolyfillBehavior(this._$initData)],
-    lifetimes: {
-      created() {
-        getChainingPolyfillMetadata(this).callLifetime(this, 'created')
-      },
-      attached() {
-        getChainingPolyfillMetadata(this).callLifetime(this, 'attached')
-      },
-      moved() {
-        getChainingPolyfillMetadata(this).callLifetime(this, 'moved')
-      },
-      detached() {
-        getChainingPolyfillMetadata(this).callLifetime(this, 'detached')
-      },
-      ready() {
-        getChainingPolyfillMetadata(this).callLifetime(this, 'ready')
-      },
-    },
-    pageLifetimes: {
-      show() {
-        getChainingPolyfillMetadata(this).callPageLifetime(this, 'show')
-      },
-      hide() {
-        getChainingPolyfillMetadata(this).callPageLifetime(this, 'hide')
-      },
-      resize(size: unknown) {
-        getChainingPolyfillMetadata(this).callPageLifetime(this, 'resize', size)
-      },
-    },
+    behaviors: [] as WechatMiniprogram.Behavior.BehaviorIdentifier<any, any, any, any>[],
+    lifetimes: {} as Lifetimes,
+    pageLifetimes: {},
     observers: [] as { fields: string; observer: GeneralFuncType }[],
     relations: {} as { [key: string]: WechatMiniprogram.Component.RelationOption },
     externalClasses: [] as string[],
@@ -280,7 +207,73 @@ export class BaseBehaviorBuilder<
     options: undefined as undefined | WechatMiniprogram.Component.ComponentOptions,
   }
 
+  private getChainingPolyfillMetadata(
+    comp: GeneralComponent,
+  ): ChainingPolyfillMetadata | undefined {
+    return this._$instanceMap.get(comp)
+  }
+
+  private generateChainingPolyfillBehavior() {
+    const instanceMap = this._$instanceMap
+    const initData = this._$initData
+    const getChainingPolyfillMetadata = this.getChainingPolyfillMetadata.bind(this)
+    return Behavior({
+      lifetimes: {
+        created() {
+          const chainingPolyfillMetadata = new ChainingPolyfillMetadata(initData)
+          instanceMap.set(this, chainingPolyfillMetadata)
+          const ctx = chainingPolyfillMetadata.generateBuilderContext(this as any)
+          initData.initFuncs.call(this, [ctx, chainingPolyfillMetadata])
+          chainingPolyfillMetadata.setInitDone()
+        },
+      },
+      methods: {
+        traitBehavior<TOut extends { [x: string]: any }>(
+          traitBehavior: TraitBehavior<any, TOut>,
+        ): TOut | undefined {
+          return getChainingPolyfillMetadata(this)!.traitGroup.get(traitBehavior)
+        },
+      },
+    })
+  }
+
   constructor() {
+    const getChainingPolyfillMetadata = this.getChainingPolyfillMetadata.bind(this)
+
+    // add an early behavior
+    const beh = this.generateChainingPolyfillBehavior()
+    this._$definition.behaviors.push(beh)
+
+    // init lifetime handlers
+    this._$definition.lifetimes = {
+      created() {
+        getChainingPolyfillMetadata(this)!.callLifetime(this, 'created')
+      },
+      attached() {
+        getChainingPolyfillMetadata(this)!.callLifetime(this, 'attached')
+      },
+      moved() {
+        getChainingPolyfillMetadata(this)!.callLifetime(this, 'moved')
+      },
+      detached() {
+        getChainingPolyfillMetadata(this)!.callLifetime(this, 'detached')
+      },
+      ready() {
+        getChainingPolyfillMetadata(this)!.callLifetime(this, 'ready')
+      },
+    }
+    this._$definition.pageLifetimes = {
+      show() {
+        getChainingPolyfillMetadata(this)!.callPageLifetime(this, 'show')
+      },
+      hide() {
+        getChainingPolyfillMetadata(this)!.callPageLifetime(this, 'hide')
+      },
+      resize(size: unknown) {
+        getChainingPolyfillMetadata(this)!.callPageLifetime(this, 'resize', size)
+      },
+    }
+
     // make observer '**' automatically available
     this.observer('**', () => {})
   }
@@ -307,7 +300,9 @@ export class BaseBehaviorBuilder<
       TExtraThisFields
     >
   > {
-    if (!this._$definition.export) this._$definition.behaviors.unshift('wx://component-export')
+    if (!this._$definition.export && isMiniProgramEnvironment()) {
+      this._$definition.behaviors.unshift('wx://component-export')
+    }
     this._$definition.export = f as any
     return this as any
   }
@@ -398,18 +393,22 @@ export class BaseBehaviorBuilder<
     paths: string | readonly string[],
     func: (this: Component<TData, TProperty, TMethod, TExtraThisFields>, ...args: any[]) => any,
   ): ResolveBehaviorBuilder<this> {
+    const getChainingPolyfillMetadata = this.getChainingPolyfillMetadata.bind(this)
     const fields = typeof paths === 'string' ? paths : paths.join(', ')
-    const assistObservers = new FuncArr()
-    assistObservers.add(func)
-    const observer = function (
-      this: Component<TData, TProperty, TMethod, TExtraThisFields>,
-      ...args: any[]
-    ) {
-      assistObservers.call(this, args)
-    }
-    this._$definition.observers.push({ fields, observer })
     const observers = this._$initData.observers
-    observers[fields] = assistObservers
+    if (!observers[fields]) {
+      observers[fields] = new FuncArr()
+      const observer = function (
+        this: Component<TData, TProperty, TMethod, TExtraThisFields>,
+        ...args: any[]
+      ) {
+        const assistObservers = getChainingPolyfillMetadata(this)!.observers[fields]
+        assistObservers.call(this, args)
+      }
+      this._$definition.observers.push({ fields, observer })
+    }
+    const assistObservers = observers[fields]
+    assistObservers.add(func)
     return this as any
   }
 
@@ -537,7 +536,7 @@ export class BaseBehaviorBuilder<
       pageLifetimes: rawPageLifetimes,
       relations: rawRelations,
       externalClasses,
-      export: exports,
+      export: exported,
     } = definition
     if (behaviors) {
       this._$definition.behaviors.push(...(behaviors as any[]))
@@ -584,7 +583,7 @@ export class BaseBehaviorBuilder<
       Object.assign(this._$definition.relations, rawRelations)
     }
     if (externalClasses) this.externalClasses(externalClasses)
-    if (exports) this.export(exports)
+    if (exported) this.export(exported)
     return this as any
   }
 }

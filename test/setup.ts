@@ -6,13 +6,11 @@ const compileTemplate = (src: string) => {
   group.addTmpl('', src)
   const genObjectSrc = `return ${group.getTmplGenObjectGroups()}`
   group.free()
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const genObjectGroupList = new Function(genObjectSrc)() as {
     [key: string]: any
   }
   return {
     groupList: genObjectGroupList,
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     content: genObjectGroupList[''],
   }
 }
@@ -20,6 +18,7 @@ const compileTemplate = (src: string) => {
 const setup = () => {
   const env = new adapter.MiniProgramEnv()
   const codeSpace = env.createCodeSpace('', true)
+  codeSpace.getComponentSpace().updateComponentOptions({ useMethodCallerListeners: true })
   const backend = env.associateBackend()
   codeSpace.componentEnv('', (env) => {
     ;(globalThis as any).Behavior = env.Behavior

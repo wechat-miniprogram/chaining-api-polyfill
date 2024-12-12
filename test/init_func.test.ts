@@ -36,6 +36,7 @@ describe('chaining calls', () => {
     )
     expect(innerHTML(component)).toBe('<div>246</div>')
   })
+
   test('`method` in init function', () => {
     const component = renderComponent(
       undefined,
