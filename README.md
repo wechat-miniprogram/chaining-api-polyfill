@@ -9,12 +9,14 @@
 
 例如，如果页面或组件有个复杂的私有变量，只能选择将它写入到 `this` 的某个字段上，或者 setData 到 `this.data` 上。无论哪种处理方式，对 TypeScript 都不太友好，而且可能带来较大的性能开销。
 
-为了解决这类问题，小程序的 [glass-easel 组件框架](https://github.com/wechat-miniprogram/glass-easel)提供了 [Chaining API](https://developers.weixin.qq.com/miniprogram/dev/framework/custom-component/glass-easel/chaining-api.html) 。其中最重要的是提供了 `init` 函数。使用 Chaining API 可以编写出更易于维护、对 TypeScript 更有好的组件代码。
+为了解决这类问题，小程序的 [glass-easel 组件框架](https://github.com/wechat-miniprogram/glass-easel)提供了 [Chaining API](https://developers.weixin.qq.com/miniprogram/dev/framework/custom-component/glass-easel/chaining-api.html) 。其中最重要的是提供了 `init` 函数。使用 Chaining API 可以编写出更易于维护、对 TypeScript 更友好的组件代码。
 
 然而，在未激活 glass-easel 组件框架时，或在旧版本的小程序基础库中， Chaining API 不被支持。这个 polyfill 可以在这些时候补上 Chaining API 支持。
 
 
 ## 基础用法
+
+基本示例可参考 [这个代码片段](https://developers.weixin.qq.com/s/IFJUZtmU7qWW) 。
 
 首先在 npm 中引入：
 
