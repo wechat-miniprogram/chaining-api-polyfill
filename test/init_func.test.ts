@@ -47,7 +47,8 @@ describe('chaining calls', () => {
             text: 'abc',
           })
           .init(function ({ method }) {
-            const ev = method(() => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const ev = method((_ev: unknown) => {
               this.setData({ text: 'def' })
             })
             return { ev }

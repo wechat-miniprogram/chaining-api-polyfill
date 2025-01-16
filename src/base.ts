@@ -55,7 +55,7 @@ export type Component<
     ) => TOut | undefined
   }
 
-export type ComponentMethod = (...any: []) => void
+export type ComponentMethod = (...any: any[]) => void
 
 export type ResolveBehaviorBuilder<B> = B
 
