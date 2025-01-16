@@ -1,6 +1,6 @@
 {
   "name": "miniprogram-chaining-api-polyfill",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Chaining API Polyfill for WeChat MiniProgram without glass-easel",
   "main": "dist/index.js",
   "types": "src/index.ts",
