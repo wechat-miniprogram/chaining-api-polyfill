@@ -38,6 +38,34 @@ describe('chaining calls', () => {
       const beh2 = Behavior().behavior(beh).register()
       Component()
         .behavior(beh2)
+        .property('propA', String)
+        .staticData({
+          text: 'abc',
+        })
+        .lifetime('attached', function () {
+          this.setData({
+            text: 'ghi',
+          })
+        })
+        .register()
+    })
+    expect(innerHTML(component)).toBe('<div>ghidef</div>')
+  })
+
+  test('`.behavior (with definition API)`', () => {
+    const component = renderComponent(undefined, `<div>{{ text }}{{ text2 }}</div>`, () => {
+      const beh = Behavior({
+        data: { text2: 'abc' },
+        properties: { propB: String },
+        lifetimes: {
+          attached() {
+            this.setData({ text: 'def', text2: 'def' })
+          },
+        },
+      })
+      Component()
+        .behavior(beh)
+        .property('propA', String)
         .staticData({
           text: 'abc',
         })

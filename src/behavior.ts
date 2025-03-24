@@ -35,7 +35,7 @@ export interface IBehaviorWithPolyfill {
       TBehavior,
       TCustomInstanceProperty
     >,
-  ): string
+  ): WechatMiniprogram.Behavior.BehaviorIdentifier<TData, TProperty, TMethod, TBehavior>
   trait<TIn extends { [key: string]: any }>(): TraitBehavior<TIn, TIn>
   trait<TIn extends { [key: string]: any }, TOut extends { [key: string]: any }>(
     trans: (impl: TIn) => TOut,
