@@ -26,6 +26,8 @@ npm install --save miniprogram-chaining-api-polyfill
 
 npm install 之后，需要点一下小程序开发者工具菜单中的“工具”——“构建 npm ”。
 
+另外，需要确认 `tsconfig` 中的 `noImplicitThis` 选项已经打开。
+
 在想要使用 Chaining API 的页面或组件文件中，引入 polyfill 过的 `Component` 构造器：
 
 ```ts
