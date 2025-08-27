@@ -98,7 +98,7 @@ export class BehaviorBuilder<
 
   /** Set the export value when the component is being selected */
   override export<TNewComponentExport>(
-    f: () => TNewComponentExport,
+    f: (this: Component<TData, TProperty, TMethod, TExtraThisFields>) => TNewComponentExport,
   ): ResolveBehaviorBuilder<
     BehaviorBuilder<
       TPrevData,

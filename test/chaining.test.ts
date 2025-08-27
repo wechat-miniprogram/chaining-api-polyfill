@@ -96,7 +96,7 @@ describe('chaining calls', () => {
           childField: 'abc',
         })
         .export(function () {
-          return { f: () => 'abc' }
+          return { f: () => this.data.childField }
         })
         .register()
     })

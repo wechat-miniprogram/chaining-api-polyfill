@@ -287,7 +287,7 @@ export class BaseBehaviorBuilder<
   }
 
   export<TNewComponentExport>(
-    f: () => TNewComponentExport,
+    f: (this: Component<TData, TProperty, TMethod, TExtraThisFields>) => TNewComponentExport,
   ): ResolveBehaviorBuilder<
     BaseBehaviorBuilder<
       TPrevData,
