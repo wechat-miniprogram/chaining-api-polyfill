@@ -24,7 +24,8 @@
     "build": "webpack",
     "dev": "webpack --mode development",
     "watch": "webpack --mode development --watch",
-    "test": "jest"
+    "test": "jest",
+    "publish-version": "node publish-version.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

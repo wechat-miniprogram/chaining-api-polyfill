@@ -1,0 +1,57 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-alpha\.[0-9]+|-beta\.[0-9]+)?$'; then
+            echo "Error: tag must be vX.Y.Z format, got: $GITHUB_REF"
+            exit 1
+          fi
+          echo "Releasing version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ACTUAL=$(grep -m1 '"version"' package.json | sed -E 's/.*"version": "([^"]*)".*/\1/')
+          if [ "$ACTUAL" != "$VERSION" ]; then
+            echo "Error: package.json has version $ACTUAL but tag is v$VERSION"
+            exit 1
+          fi
+          echo "OK: package.json = $ACTUAL"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --provenance --no-git-checks
