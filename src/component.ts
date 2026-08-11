@@ -1,19 +1,22 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-type-parameters */
+/* eslint-disable @typescript-eslint/no-invalid-void-type */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
-  AllData,
+  type AllData,
   BaseBehaviorBuilder,
-  BuilderContext,
-  ChainingFilterType,
-  Component as BaseComponent,
-  DataList,
-  Empty,
-  MethodList,
-  NewFieldList,
-  PropertyList,
-  PropertyType,
-  ResolveBehaviorBuilder,
-  ClassicDefinition,
+  type BuilderContext,
+  type ChainingFilterType,
+  type Component as BaseComponent,
+  type DataList,
+  type Empty,
+  type MethodList,
+  type NewFieldList,
+  type PropertyList,
+  type PropertyType,
+  type ResolveBehaviorBuilder,
+  type ClassicDefinition,
 } from './base'
-import { TaggedMethod, UnTaggedMethod } from './type_utils'
+import { type TaggedMethod, type UnTaggedMethod } from './type_utils'
 
 declare const Component: WechatMiniprogram.Component.Constructor
 
@@ -72,7 +75,7 @@ export class ComponentBuilder<
    */
   options(options: WechatMiniprogram.Component.ComponentOptions): ResolveBehaviorBuilder<this> {
     this._$definition.options = options
-    return this as any
+    return this
   }
 
   /** Use another behavior */
@@ -80,11 +83,10 @@ export class ComponentBuilder<
     UData extends DataList,
     UProperty extends PropertyList,
     UMethod extends MethodList,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _UChainingFilter extends ChainingFilterType,
     UExtraThisFields extends DataList,
   >(
-    behavior: WechatMiniprogram.Behavior.Identifier<UData, UProperty, UMethod, []>,
+    behavior: WechatMiniprogram.Behavior.Identifier<UData, UProperty, UMethod>,
   ): ComponentBuilder<
     TPrevData,
     TData & UData,

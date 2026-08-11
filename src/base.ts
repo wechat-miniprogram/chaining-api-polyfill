@@ -1,13 +1,23 @@
+/* eslint-disable @typescript-eslint/no-deprecated */
+/* eslint-disable @typescript-eslint/no-invalid-void-type */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
+/* eslint-disable @typescript-eslint/no-unnecessary-type-parameters */
+/* eslint-disable @typescript-eslint/no-unnecessary-type-conversion */
+
 import { isMiniProgramEnvironment } from '.'
-import { GeneralFuncType, FuncArr } from './func_arr'
-import { TraitBehavior, TraitGroup } from './trait_behavior'
+import { type GeneralFuncType, FuncArr } from './func_arr'
+import { type TraitBehavior, TraitGroup } from './trait_behavior'
 import {
-  GetFromObserverPathString,
+  type GetFromObserverPathString,
   METHOD_TAG,
-  ObserverDataPathStrings,
-  SetDataSetter,
-  TaggedMethod,
-  UnTaggedMethod,
+  type ObserverDataPathStrings,
+  type SetDataSetter,
+  type TaggedMethod,
+  type UnTaggedMethod,
 } from './type_utils'
 
 export type Empty = Record<never, never>
@@ -88,7 +98,7 @@ class ChainingPolyfillMetadata {
       const dest = {} as typeof src
       const keys = Object.keys(src)
       for (let i = 0; i < keys.length; i += 1) {
-        const key = keys[i]!
+        const key = keys[i]
         dest[key] = src[key].clone()
       }
       return dest
@@ -154,7 +164,7 @@ class ChainingPolyfillMetadata {
     if (typeof exported === 'object' && exported !== null) {
       const exportedKeys = Object.keys(exported)
       for (let j = 0; j < exportedKeys.length; j += 1) {
-        const exportedKey = exportedKeys[j]!
+        const exportedKey = exportedKeys[j]
         const exportItem = (exported as { [k in string]: unknown })[exportedKey]
         if (isTaggedMethod(exportItem)) {
           comp[exportedKey] = exportItem
@@ -188,11 +198,11 @@ export class BaseBehaviorBuilder<
 > {
   private _$instanceMap: WeakMap<GeneralComponent, ChainingPolyfillMetadata> = new WeakMap()
   private _$initData = {
-    lifetimes: {},
-    pageLifetimes: {},
-    observers: {},
+    lifetimes: {} as Record<string, any>,
+    pageLifetimes: {} as Record<string, any>,
+    observers: {} as Record<string, any>,
     initFuncs: new FuncArr(),
-  } as ChainingPolyfillInitData
+  }
   protected _$definition = {
     data: {} as DataList,
     properties: {} as WechatMiniprogram.Behavior.PropertyOption,
@@ -409,7 +419,7 @@ export class BaseBehaviorBuilder<
     }
     const assistObservers = observers[fields]
     assistObservers.add(func)
-    return this as any
+    return this
   }
 
   /**
@@ -427,7 +437,7 @@ export class BaseBehaviorBuilder<
       lifetimes[name] = new FuncArr()
     }
     lifetimes[name].add(func)
-    return this as any
+    return this
   }
 
   /**
@@ -445,7 +455,7 @@ export class BaseBehaviorBuilder<
       pageLifetimes[name] = new FuncArr()
     }
     pageLifetimes[name].add(func)
-    return this as any
+    return this
   }
 
   /**
@@ -457,7 +467,7 @@ export class BaseBehaviorBuilder<
       ThisType<Component<TData, TProperty, TMethod, TExtraThisFields>>,
   ): ResolveBehaviorBuilder<this> {
     this._$definition.relations[name] = rel
-    return this as any
+    return this
   }
 
   init<TExport extends Record<string, TaggedMethod<(...args: any[]) => any>> | void>(
@@ -551,8 +561,8 @@ export class BaseBehaviorBuilder<
       } else {
         const keys = Object.keys(rawObservers)
         for (let i = 0; i < keys.length; i += 1) {
-          const fields = keys[i]!
-          const observer = rawObservers[fields]!
+          const fields = keys[i]
+          const observer = rawObservers[fields]
           this._$definition.observers.push({ fields, observer })
         }
       }
@@ -566,7 +576,7 @@ export class BaseBehaviorBuilder<
     if (rawLifetimes) {
       const keys = Object.keys(rawLifetimes)
       for (let i = 0; i < keys.length; i += 1) {
-        const name = keys[i]!
+        const name = keys[i]
         const func = (rawLifetimes as any)[name]
         this.lifetime(name as any, func)
       }
@@ -574,7 +584,7 @@ export class BaseBehaviorBuilder<
     if (rawPageLifetimes) {
       const keys = Object.keys(rawPageLifetimes)
       for (let i = 0; i < keys.length; i += 1) {
-        const name = keys[i]!
+        const name = keys[i]
         const func = (rawPageLifetimes as any)[name]!
         this.pageLifetime(name as any, func)
       }

@@ -4,9 +4,9 @@
         "noImplicitAny": true,
         "noImplicitThis": true,
         "module": "CommonJS",
-        "target": "es5",
+        "target": "es6",
         "esModuleInterop": true,
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
         "lib": ["ES6", "ES7", "DOM", "ESNext"]
     },
     "include": [

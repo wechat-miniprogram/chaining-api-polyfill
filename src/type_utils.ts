@@ -106,9 +106,7 @@ export type ObjectDataPathStrings<
         : Prefix
 
 export type ObserverDataPathStrings<T, S extends string = ObjectDataPathStrings<T>> =
-  | '**'
-  | S
-  | `${S}.**`
+  '**' | S | `${S}.**`
 
 /**
  * GetFromDataPathString<{ name: string; age: number }, 'name'> = string
@@ -152,6 +150,7 @@ type GetTags<B> = B extends {
   : []
 
 export type Equal<X, Y> =
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
   (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false
 
 type GetTagsWithout<B, T extends symbol, Tags = GetTags<B>> = Tags extends [infer F, ...infer R]

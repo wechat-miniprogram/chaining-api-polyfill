@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-invalid-void-type */
 export type GeneralFuncType = (this: any, ...args: any[]) => any
 
 export class FuncArr<F extends GeneralFuncType> {
@@ -22,7 +23,7 @@ export class FuncArr<F extends GeneralFuncType> {
     let ret = true
     if (arr) {
       for (let i = 0; i < arr.length; i += 1) {
-        const r = safeCallback<F>(arr[i]!, caller, args)
+        const r = safeCallback<F>(arr[i], caller, args)
         if (r === false) ret = false
       }
     }
@@ -37,8 +38,10 @@ export function safeCallback<F extends GeneralFuncType>(
   args: Parameters<F>,
 ): ReturnType<F> | undefined {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return method.apply(caller, args)
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error(e)
     return undefined
   }
