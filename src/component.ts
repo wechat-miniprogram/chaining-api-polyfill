@@ -84,7 +84,7 @@ export class ComponentBuilder<
     _UChainingFilter extends ChainingFilterType,
     UExtraThisFields extends DataList,
   >(
-    behavior: WechatMiniprogram.Behavior.BehaviorIdentifier<UData, UProperty, UMethod, []>,
+    behavior: WechatMiniprogram.Behavior.Identifier<UData, UProperty, UMethod, []>,
   ): ComponentBuilder<
     TPrevData,
     TData & UData,

@@ -197,7 +197,7 @@ export class BaseBehaviorBuilder<
     data: {} as DataList,
     properties: {} as WechatMiniprogram.Behavior.PropertyOption,
     methods: {} as MethodList,
-    behaviors: [] as WechatMiniprogram.Behavior.BehaviorIdentifier<any, any, any, any>[],
+    behaviors: [] as WechatMiniprogram.Behavior.Identifier<any, any, any, any>[],
     lifetimes: {} as Lifetimes,
     pageLifetimes: {},
     observers: [] as { fields: string; observer: GeneralFuncType }[],

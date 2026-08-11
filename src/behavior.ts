@@ -35,7 +35,7 @@ export interface IBehaviorWithPolyfill {
       TBehavior,
       TCustomInstanceProperty
     >,
-  ): WechatMiniprogram.Behavior.BehaviorIdentifier<TData, TProperty, TMethod, TBehavior>
+  ): WechatMiniprogram.Behavior.Identifier<TData, TProperty, TMethod, TBehavior>
   trait<TIn extends { [key: string]: any }>(): TraitBehavior<TIn, TIn>
   trait<TIn extends { [key: string]: any }, TOut extends { [key: string]: any }>(
     trans: (impl: TIn) => TOut,
@@ -81,7 +81,7 @@ export class BehaviorBuilder<
     _UChainingFilter extends ChainingFilterType,
     UExtraThisFields extends DataList,
   >(
-    behavior: WechatMiniprogram.Behavior.BehaviorIdentifier<UData, UProperty, UMethod, []>,
+    behavior: WechatMiniprogram.Behavior.Identifier<UData, UProperty, UMethod, []>,
   ): BehaviorBuilder<
     TPrevData,
     TData & UData,
@@ -251,7 +251,7 @@ export class BehaviorBuilder<
   /**
    * Finish the behavior definition process
    */
-  register(): WechatMiniprogram.Behavior.BehaviorIdentifier<TData, TProperty, TMethod> {
+  register(): WechatMiniprogram.Behavior.Identifier<TData, TProperty, TMethod> {
     return Behavior(this._$definition as any)
   }
 
